@@ -12,9 +12,9 @@
 
     <!-- Identidad del TEMPLATE -->
     <groupId>com.coppel</groupId>
-    <artifactId>coppel</artifactId>
+    <artifactId>mx-api-bc-bd-ms-clientes</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>coppel</name>
+    <name>mx-api-bc-bd-ms-clientes</name>
     <description>Spring Boot template for Coppel projects</description>
 
     <properties>

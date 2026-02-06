@@ -1,6 +1,6 @@
 spring:
   application:
-    name: coppel
+    name: mx-api-bc-bd-ms-clientes
 
 server:
   port: 8080
