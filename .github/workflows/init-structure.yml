@@ -1,0 +1,139 @@
+name: Initialize Spring Boot Structure
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # permite ejecutar manualmente desde Actions
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout del repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # permite push usando GITHUB_TOKEN
+
+      - name: Resolve project name
+        run: |
+          RAW_NAME="${GITHUB_REPOSITORY##*/}"             # springboot-coppel-usuarios
+          # Quitar prefijo y sufijo de template
+          PROJECT_NAME=$(echo "$RAW_NAME" | sed 's/^springboot-//' | sed 's/-template//')
+          # Quitar "coppel-" si esta al inicio
+          PROJECT_NAME=$(echo "$PROJECT_NAME" | sed 's/^coppel-//')
+          # Cambiar guiones a guiones bajos solo si quieres subpaquetes con _
+          # PROJECT_NAME=$PROJECT_NAME$(echo "$PROJECT_NAME" | tr '-' '_')
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+          echo "Resolved project name: $PROJECT_NAME"
+
+      # Limpiar cualquier contenido previo en coppel/
+      - name: Clean previous structure
+        run: |
+          echo "Cleaning src/main/java/com/coppel/"
+          rm -rf src/main/java/com/coppel/*
+
+      - name: Create Spring Boot structure
+        run: |
+          # Convertir project name a CamelCase para la clase
+          # CLASS_NAME=$(echo "$PROJECT_NAME" | sed -r 's/(^|_)([a-z])/\U\2/g')
+          CLASS_NAME=$(echo "$PROJECT_NAME" \
+          | sed 's/[-_]/ /g' \
+          | awk '{ for (i=1; i<=NF; i++) $i=toupper(substr($i,1,1)) substr($i,2) } 1' \
+          | tr -d ' ')
+
+          APP_CLASS="${CLASS_NAME}Application"
+          PACKAGE_NAME=$(echo "$PROJECT_NAME" | tr '-' '_' | tr '[:upper:]' '[:lower:]')
+
+          BASE=src/main/java/com/coppel/$PACKAGE_NAME
+          APP_FILE="$BASE/${APP_CLASS}.java"
+
+          mkdir -p $BASE/{controller,service,repository,model,dto,config,exception}
+          mkdir -p src/main/resources
+
+          # Crear .gitkeep en todas las carpetas
+          find $BASE -type d -exec touch {}/.gitkeep \;
+          #touch src/main/resources/.gitkeep
+
+          # Crear Application.java
+          cat <<EOF > $APP_FILE
+          package com.coppel.${PACKAGE_NAME};
+
+          import org.springframework.boot.SpringApplication;
+          import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+          @SpringBootApplication
+          public final class ${APP_CLASS} {
+
+              public static void main(final String[] args) {
+                  SpringApplication.run(${APP_CLASS}.class, args);
+              }
+          }
+          EOF
+
+          # Crear application.yaml
+          cat <<EOF > src/main/resources/application.yaml
+          spring:
+            application:
+              name: ${PROJECT_NAME}
+
+          server:
+            port: 8080
+          EOF
+
+          CONTROLLER_DIR=src/main/java/com/coppel/$PACKAGE_NAME/controller
+          CONTROLLER_FILE="$CONTROLLER_DIR/HelloController.java"
+
+          # Crear HelloController.java
+          cat <<EOF > $CONTROLLER_FILE
+          package com.coppel.${PACKAGE_NAME}.controller;
+
+          import org.springframework.web.bind.annotation.GetMapping;
+          import org.springframework.web.bind.annotation.RestController;
+
+          @RestController
+          public class HelloController {
+
+              @GetMapping("/hello")
+              public String hello() {
+                  return "Hello World Global Coppel Template";
+              }
+          }
+          EOF
+
+      # Actualizar pom.xml
+      - name: Update pom.xml
+        run: |
+          PROJECT_ID="${PROJECT_NAME}"                    # usuarios
+          PROJECT_NAME_READABLE=$(echo "$PROJECT_NAME" | tr '_' '-') # usuarios
+
+          sudo apt-get update && sudo apt-get install -y xmlstarlet
+
+          # Actualizar <groupId> del proyecto (NO parent)
+          xmlstarlet ed -P -L \
+            -N mvn="http://maven.apache.org/POM/4.0.0" \
+            -u "/mvn:project/mvn:groupId" -v "com.coppel" \
+            pom.xml
+
+          # Actualizar <artifactId> del proyecto (NO parent)
+          xmlstarlet ed -P -L \
+            -N mvn="http://maven.apache.org/POM/4.0.0" \
+            -u "/mvn:project/mvn:artifactId" -v "$PROJECT_ID" \
+            pom.xml
+
+          # Actualizar <name>
+          xmlstarlet ed -P -L \
+            -N mvn="http://maven.apache.org/POM/4.0.0" \
+            -u "/mvn:project/mvn:name" -v "$PROJECT_NAME_READABLE" \
+            pom.xml
+
+      - name: Commit structure
+        run: |
+          git status
+          git config user.name "Baldemar Estrada"
+          git config user.email "Baldemar.estrada@fullman.cloud"
+
+          git add .
+          git commit -m "Initialize Spring Boot project structure" || echo "Nothing to commit"
+          git push
